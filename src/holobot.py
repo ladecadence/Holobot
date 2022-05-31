@@ -13,6 +13,8 @@ import threading
 import http.server
 import socketserver
 import os
+import shutil
+import requests
 
 class Holobot(tk.Frame):
 
@@ -39,11 +41,11 @@ class Holobot(tk.Frame):
             self.config = config.options
             self.leds = holobotleds.HolobotLEDS(self.config["url_leds"])
             self.kuka = kuka.Kuka(self.config["ip_robot"], self.config["port_robot"])
-            #self.camera = camera.Camera(self.config["image_path"])
+            self.camera = camera.Camera(self.config["image_path"])
         except TimeoutError:
             pass
         try:
-            self.vis = liblo.Address(self.config["ip_vis"], self.config["port_vis"])
+            self.osc = liblo.Address(self.config["ip_vis"], self.config["port_vis"])
         except liblo.AddressError as err:
             print(err)
             sys.exit()
@@ -107,7 +109,7 @@ class Holobot(tk.Frame):
 
         self.leds.show_stripes(time=(self.time.get() * 1000), width=10, steps=5, step_delay=500, color=self.color)
         self.camera.take_picture()
-        self.after(2000, self.reload_img)
+        self.after(2000, self.reload_picture)
 
     def test_all_img(self):
         #self.camera.set_aperture(self.camera.APERTURE_25)
@@ -116,7 +118,17 @@ class Holobot(tk.Frame):
 
         self.leds.show_picture(delay=35, filename="img.bmp")
         #self.camera.take_picture()
-        self.after(2000, self.reload_img)
+        self.after(2000, self.reload_picture)
+
+    def download_image(self):
+        url = "http://" + self.config["ip_vis"] + "/image"
+        r = requests.get(url, stream = True)
+        if r.status_code == 200:
+            r.raw.decode_content = True
+            with open(self.config["picture_path"] + self.config["picture_name"],'wb') as f:
+                shutil.copyfileobj(r.raw, f)
+
+        pass
 
     # GUI and threads
     def create_widgets(self):
@@ -125,7 +137,7 @@ class Holobot(tk.Frame):
         self.robot_status_label.pack(padx=20, pady=10, fill='x')
 
         self.leds_status_label = tk.Label(self)
-        self.leds_status_label["text"] = "LEDs status = " #+ self.get_status_leds()
+        self.leds_status_label["text"] = "LEDs status = " + self.get_status_leds() + ", " + self.leds.get_battery() + " V."
         self.leds_status_label.pack(padx=20, pady=10, fill='x')
 
         self.robot_test_leds_button = tk.Button(self)
@@ -190,10 +202,13 @@ class Holobot(tk.Frame):
         self.server_thread.setDaemon(True)
         self.server_thread.start()
 
+        # update image
+        self.download_image()
+
     def debug(self, msg):
         self.statusbar["text"] = msg
 
-    def reload_img(self):
+    def reload_picture(self):
         self.last_img = Image.open(self.config["image_path"] + "last.jpg")
         self.last_img = self.last_img.resize((400, 300), Image.Resampling.LANCZOS)
         self.last_img = ImageTk.PhotoImage(self.last_img)
@@ -229,18 +244,21 @@ class Holobot(tk.Frame):
         # one in several is a picture
         rnd = random.randint(1, 5)
         if rnd == 1 or rnd == 2:
-            # get picture width
+            # update image
+            self.debug("Downloading picture... ")
+            self.download_image()
+            # get image width
             width, height= self.leds.picture_info(self.config["picture_path"] + self.config["picture_name"])
             # rotate it
             self.leds.transform_picture(self.config["picture_path"] + self.config["picture_name"], \
                                      self.config["picture_path"] + self.config["temp_picture_name"],
                                      rot, mirror)
             # upload it
-            self.debug("Uploading picture: " + self.config["temp_picture_name"] + "...")
+            self.debug("Uploading picture to LEDs: " + self.config["temp_picture_name"] + "...")
             self.leds.upload_bmp(self.config["picture_path"] + self.config["temp_picture_name"])
             # calculate time
             duration = (duration * 1000) - 500 # (ms)
-            time.sleep(0.25)
+            time.sleep(0.5)
             self.leds.show_picture(delay=int(duration//width), filename=self.config["temp_picture_name"])
 
         else:
@@ -299,19 +317,31 @@ class Holobot(tk.Frame):
             self.launch_random_animation(mov["duration"], mov["rot"], mov["mirror"])
             # camera blocks, so launch it in a thread
             cam_th = threading.Thread(target = self.camera.take_picture)
-
-            #self.camera.take_picture()
             cam_th.start()
+
+            # move
             self.debug("Movement: " + mov["name"])
             self.kuka.move(mov["id"])
             while (self.kuka.is_moving() and self.auto):
                 time.sleep(0.25)
+
             # wait for camera to finish
             cam_th.join()
+
+            # tell we have a new picture
+            msg = liblo.Message("/nueva")
+            msg.add(0, "foto!")
+            liblo.send(self.osc, msg)
 
             # return home
             self.debug("Homing...")
             self.kuka.home()
+            while (self.kuka.is_moving() and self.auto):
+                time.sleep(0.25)
+
+            # and wait
+            self.debug("Waiting...")
+            time.sleep(self.config["pause"])
 
     def on_exit(self):
         self.auto=False

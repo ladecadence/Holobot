@@ -96,9 +96,9 @@ class HolobotLEDS:
     def get_battery(self):
         url = self.url +  "/battery"
 
-        response = requestes.get(url)
+        response = requests.get(url)
         if response.ok:
-            battery = response.text
+            battery = response.text.strip()
             return battery
         else:
             print ("Problem reading battery")

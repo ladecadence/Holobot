@@ -23,14 +23,17 @@ class Holobot(tk.Frame):
         self.master.geometry("600x920")
         self.master.protocol("WM_DELETE_WINDOW", self.on_exit)
         self.pack(fill='both', expand=True)
+        # variables
         self.color = (255, 255, 255)
         self.time = tk.IntVar()
         self.shutter = 8
         self.brightness = 100
         self.auto = False
+        # threads
         self.server_thread = None
         self.handler = http.server.SimpleHTTPRequestHandler
 
+        # init submodules
         try:
             # holobot related
             self.config = config.options
@@ -48,23 +51,24 @@ class Holobot(tk.Frame):
         # init GUI
         self.create_widgets()
 
+    # tk rgb to hex notation
     def convert_rgb(self, rgb):
         return "#%02x%02x%02x" % rgb
 
+    # web server
     def start_server(self):
-        '''Start a simple webserver serving path on port'''
+        '''Start a simple webserver serving image path to share camera images'''
         os.chdir(self.config["image_path"])
         self.httpd = http.server.HTTPServer(('', self.config["http_server_port"]), self.handler)
         self.httpd.serve_forever()
 
+    # move slider only through shutter values
     def valuecheck_shutter(self, value):
         newvalue = min(camera.Camera.shutters.keys(), key=lambda x:abs(x-float(value)))
         self.shutter_scale.set(newvalue)
         self.shutter = newvalue
 
-    def test_leds(self):
-        self.leds.test()
-
+    # Status related
     def get_status_robot(self):
         if self.kuka.connected:
             if self.kuka.status() == self.kuka.STATUS_OK:
@@ -78,12 +82,16 @@ class Holobot(tk.Frame):
         status = self.leds.status()
         return "" + status[0] + " : " + status[1]
 
+
+    # LED related
+    def test_leds(self):
+        self.leds.test()
+
     def set_brightness(self, value):
         if not self.auto:
             self.brightness = self.brightness_scale.get()
             print("brillo! " + str(self.brightness))
             self.leds.set_brightness(self.brightness)
-
 
     def test_lines(self):
         self.kuka.move("1")
@@ -110,6 +118,7 @@ class Holobot(tk.Frame):
         #self.camera.take_picture()
         self.after(2000, self.reload_img)
 
+    # GUI and threads
     def create_widgets(self):
         self.robot_status_label = tk.Label(self)
         self.robot_status_label["text"] = "Robot status = " + str(self.get_status_robot())
@@ -242,7 +251,7 @@ class Holobot(tk.Frame):
             d = random.randint(100, 1000)
             self.leds.show_stripes(time=duration * 1000, width=w, steps=s, step_delay=d, color=c)
 
-
+    # AUTO mode
     def change_auto(self):
         self.auto = not self.auto
         if self.auto:

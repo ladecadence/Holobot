@@ -37,7 +37,10 @@ class Kuka:
         return not not moving
 
     def get_movement(self, mov_id):
-        return self.movements[mov_id]
+        if mov_id < 0 or mov_id >= len(self.movements):
+            return self.movements[0]
+        else:
+            return self.movements[mov_id]
 
     def get_random_movement(self):
         mov = random.randrange(len(self.movements))

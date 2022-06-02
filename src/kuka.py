@@ -36,6 +36,9 @@ class Kuka:
         moving = int(self.client.read('EXT_STATUS', debug=True))
         return not not moving
 
+    def get_movement(self, mov_id):
+        return self.movements[mov_id]
+
     def get_random_movement(self):
         mov = random.randrange(len(self.movements))
         return self.movements[mov]

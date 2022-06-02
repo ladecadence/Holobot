@@ -10,7 +10,7 @@ options = {
     "pause" : 10,
     "test_movement" : 0,
     "brightness" : "50",
-    "default_aperture" : "25"
+    "default_aperture" : "25",
     # paths
     "image_path" : "/home/zako/Imáxenes/",
     "picture_path" : "/home/zako/Ladecadence/Trabajo/Hiriki/Expos/Holobot/Holobot/img/",

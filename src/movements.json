@@ -1,12 +1,13 @@
 [
         {"id" : "101", "startpos": "1", "duration": 5, "name": "MOV_UPDOWN", "rot": 2, "mirror": 0},
-        {"id" : "102", "startpos": "2", "duration": 5, "name": "MOV_DOWNUP", "rot": 0, "mirror": 0 },
+        {"id" : "102", "startpos": "2", "duration": 5, "name": "MOV_DOWNUP", "rot": 0, "mirror": 1 },
         {"id" : "103", "startpos": "3", "duration": 6, "name": "MOV_LEFTRIGHT", "rot": 1, "mirror": 0 },
         {"id" : "104", "startpos": "4", "duration": 6, "name": "MOV_RIGHTLEFT", "rot": 3, "mirror": 1 },
         {"id" : "105", "startpos": "5", "duration": 13, "name": "MOV_ARC_DOWN_RIGHTLEFT", "rot": 3, "mirror": 1 },
-        {"id" : "107", "startpos": "7", "duration": 6, "name": "MOV_CIRCLE", "rot": 2, "mirror": 0 },
+        {"id" : "107", "startpos": "7", "duration": 5, "name": "MOV_CIRCLE", "rot": 2, "mirror": 0 },
         {"id" : "108", "startpos": "8", "duration": 7, "name": "MOV_CILINDER_RIGHTLEFT", "rot": 3, "mirror": 1 },
         {"id" : "109", "startpos": "9", "duration": 7, "name": "MOV_CILINDER_LEFTRIGHT", "rot": 1, "mirror": 0 },
-        {"id" : "110", "startpos": "10", "duration": 10, "name": "MOV_ZIGZAG_UP_DOWNRIGHT", "rot": 2, "mirror": 0 }
-
+        {"id" : "110", "startpos": "10", "duration": 10, "name": "MOV_ZIGZAG_UP_DOWNRIGHT", "rot": 2, "mirror": 0 },
+        {"id" : "111", "startpos": "7", "duration": 7, "name": "MOV_RANDOM1", "rot": 2, "mirror": 0 },
+        {"id" : "112", "startpos": "3", "duration": 8, "name": "MOV_WAVES_LEFT_RIGHT", "rot": 1, "mirror": 0 }
 ]

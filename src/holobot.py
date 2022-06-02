@@ -25,12 +25,14 @@ class Holobot(tk.Frame):
         self.master.geometry("600x920")
         self.master.protocol("WM_DELETE_WINDOW", self.on_exit)
         self.pack(fill='both', expand=True)
+
         # variables
         self.color = (255, 255, 255)
         self.time = tk.IntVar()
         self.shutter = 8
         self.brightness = 100
         self.auto = False
+
         # threads
         self.server_thread = None
         self.handler = http.server.SimpleHTTPRequestHandler
@@ -42,8 +44,9 @@ class Holobot(tk.Frame):
             self.leds = holobotleds.HolobotLEDS(self.config["url_leds"])
             self.kuka = kuka.Kuka(self.config["ip_robot"], self.config["port_robot"])
             self.camera = camera.Camera(self.config["image_path"])
-        except TimeoutError:
-            pass
+        except TimeoutError as err:
+            print(err)
+            sys.exit()
         try:
             self.osc = liblo.Address(self.config["ip_vis"], self.config["port_vis"])
         except liblo.AddressError as err:
@@ -86,15 +89,18 @@ class Holobot(tk.Frame):
 
 
     # LED related
-    def test_leds(self):
-        self.leds.test()
-
     def set_brightness(self, value):
         if not self.auto:
             self.brightness = self.brightness_scale.get()
             print("brillo! " + str(self.brightness))
             self.leds.set_brightness(self.brightness)
 
+    # TESTS
+    # test all the LEDs
+    def test_leds(self):
+        self.leds.test()
+
+    # some lines
     def test_lines(self):
         self.kuka.move("1")
         while self.kuka.is_moving():
@@ -102,24 +108,84 @@ class Holobot(tk.Frame):
         self.leds.show_stripes(time=self.time.get() * 1000, width=10, steps=5, step_delay=500, color=self.color)
         self.kuka.move("101")
 
+    # lines with movement and camera
     def test_all(self):
-        self.camera.set_aperture(self.camera.APERTURE_25)
-        self.camera.set_shutter_speed(str(self.shutter))
+        mov = self.kuka.get_movement(self.config["test_movement"])
+        # configure camera
+        shutter = self.camera.get_longer_shutter(mov["duration"])
+        print("Shutter: " + str(shutter))
+        self.camera.set_aperture(self.config["default_aperture"])
+        self.camera.set_shutter_speed(str(shutter))
         self.camera.set_iso(self.camera.ISO_100)
 
-        self.leds.show_stripes(time=(self.time.get() * 1000), width=10, steps=5, step_delay=500, color=self.color)
-        self.camera.take_picture()
-        self.after(2000, self.reload_picture)
+        # move to starting point
+        self.debug("Moving to origin: " + mov["startpos"])
+        self.kuka.move(mov["startpos"])
+        while (self.kuka.is_moving()):
+            time.sleep(0.25)
 
+        # ok, now call the movement, LED animation and trigger camera,
+        self.launch_lines(mov["duration"], mov["rot"], mov["mirror"])
+        # camera blocks, so launch it in a thread
+        cam_th = threading.Thread(target = self.camera.take_picture)
+        cam_th.start()
+
+        # move
+        self.debug("Movement: " + mov["name"])
+        self.kuka.move(mov["id"])
+        while (self.kuka.is_moving()):
+            time.sleep(0.25)
+
+        # wait for camera to finish
+        cam_th.join()
+
+        # show it
+        self.reload_picture()
+
+        self.debug("Homing...")
+        self.kuka.home()
+        self.debug("READY")
+
+    # image with movement and camera
     def test_all_img(self):
-        #self.camera.set_aperture(self.camera.APERTURE_25)
-        #self.camera.set_shutter_speed(str(self.shutter))
-        #self.camera.set_iso(self.camera.ISO_100)
+        mov = self.kuka.get_movement(self.config["test_movement"])
+        # configure camera
+        shutter = self.camera.get_longer_shutter(mov["duration"])
+        print("Shutter: " + str(shutter))
+        self.camera.set_aperture(self.config["default_aperture"])
+        self.camera.set_shutter_speed(str(shutter))
+        self.camera.set_iso(self.camera.ISO_100)
 
-        self.leds.show_picture(delay=35, filename="img.bmp")
-        #self.camera.take_picture()
-        self.after(2000, self.reload_picture)
+        # move to starting point
+        self.debug("Moving to origin: " + mov["startpos"])
+        self.kuka.move(mov["startpos"])
+        while (self.kuka.is_moving()):
+            time.sleep(0.25)
 
+        # ok, now call the movement, LED animation and trigger camera,
+        self.launch_picture(mov["duration"], mov["rot"], mov["mirror"])
+        # camera blocks, so launch it in a thread
+        cam_th = threading.Thread(target = self.camera.take_picture)
+        cam_th.start()
+
+        # move
+        self.debug("Movement: " + mov["name"])
+        self.kuka.move(mov["id"])
+        while (self.kuka.is_moving()):
+            time.sleep(0.25)
+
+        # wait for camera to finish
+        cam_th.join()
+
+        # show it
+        self.reload_picture()
+
+        self.debug("Homing...")
+        self.kuka.home()
+        self.debug("READY" + " " + self.leds.get_battery() + " V.")
+
+
+    # get images from VIS server
     def download_image(self):
         url = "http://" + self.config["ip_vis"] + "/image"
         r = requests.get(url, stream = True)
@@ -128,8 +194,6 @@ class Holobot(tk.Frame):
             with open(self.config["picture_path"] + self.config["picture_name"],'wb') as f:
                 shutil.copyfileobj(r.raw, f)
 
-        pass
-
     # GUI and threads
     def create_widgets(self):
         self.robot_status_label = tk.Label(self)
@@ -137,7 +201,7 @@ class Holobot(tk.Frame):
         self.robot_status_label.pack(padx=20, pady=10, fill='x')
 
         self.leds_status_label = tk.Label(self)
-        self.leds_status_label["text"] = "LEDs status = " + self.get_status_leds() + ", " + self.leds.get_battery() + " V."
+        self.leds_status_label["text"] = "LEDs status = " + self.get_status_leds()
         self.leds_status_label.pack(padx=20, pady=10, fill='x')
 
         self.robot_test_leds_button = tk.Button(self)
@@ -194,20 +258,18 @@ class Holobot(tk.Frame):
 
         self.statusbar = ttk.Label(self, text="", relief=tk.SUNKEN, anchor=tk.W)
         self.statusbar.pack(side='bottom', fill="x", expand=True)
-        self.statusbar["text"] = "READY"
+        self.statusbar["text"] = "READY" + ", " + self.leds.get_battery() + " V."
 
         # server thread
         self.server_thread = threading.Thread(name='http_server',
-                          target=self.start_server)
-        self.server_thread.setDaemon(True)
+                          target=self.start_server, daemon = True)
         self.server_thread.start()
 
-        # update image
-        self.download_image()
-
+    # Status line messages
     def debug(self, msg):
         self.statusbar["text"] = msg
 
+    # Update picture in GUI
     def reload_picture(self):
         self.last_img = Image.open(self.config["image_path"] + "last.jpg")
         self.last_img = self.last_img.resize((400, 300), Image.Resampling.LANCZOS)
@@ -216,12 +278,14 @@ class Holobot(tk.Frame):
         #self.img_label = tk.Label(self, image = self.last_img)
         self.img_label.config(image=self.last_img)
 
+    # Select a color
     def change_color(self):
         colors = askcolor(title="Color Chooser")
         #print(colors)
         self.color = colors[0]
         self.robot_color_button.configure(bg = "black",  fg = self.convert_rgb(self.color))
 
+    # Blink auto button
     def blink_auto(self):
         if self.auto:
             if self.auto_button["fg"] == "white":
@@ -232,6 +296,7 @@ class Holobot(tk.Frame):
                 self.auto_button["bg"] = "red4"
             self.after(1000, self.blink_auto)
 
+    # get a ramdom color
     def get_random_color(self):
         # avoid very dark colors
         r = random.randint(50, 200)
@@ -240,6 +305,31 @@ class Holobot(tk.Frame):
 
         return (r, g, b)
 
+    # generate ramdom line pattern
+    def launch_lines(self, duration):
+        w = random.randint(1, 20)
+        c = self.get_random_color()
+        s = random.randint(1, 5)
+        d = random.randint(100, 1000)
+
+        self.leds.show_stripes(time=duration * 1000, width=w, steps=s, step_delay=d, color=c)
+
+    # generate picture with correct orientation
+    def launch_picture(self, duration, rot, mirror):
+        width, height= self.leds.picture_info(self.config["picture_path"] + self.config["picture_name"])
+        # rotate it
+        self.leds.transform_picture(self.config["picture_path"] + self.config["picture_name"], \
+                                     self.config["picture_path"] + self.config["temp_picture_name"],
+                                     rot, mirror)
+        # upload it
+        self.debug("Uploading picture to LEDs: " + self.config["temp_picture_name"] + "...")
+        self.leds.upload_bmp(self.config["picture_path"] + self.config["temp_picture_name"])
+        # calculate time
+        duration = (duration * 1000) - 1000 # (ms)
+        time.sleep(0.5)
+        self.leds.show_picture(delay=int(duration//width), filename=self.config["temp_picture_name"])
+
+    # launch random line pattern or picture
     def launch_random_animation(self, duration, rot, mirror):
         # one in several is a picture
         rnd = random.randint(1, 5)
@@ -257,7 +347,7 @@ class Holobot(tk.Frame):
             self.debug("Uploading picture to LEDs: " + self.config["temp_picture_name"] + "...")
             self.leds.upload_bmp(self.config["picture_path"] + self.config["temp_picture_name"])
             # calculate time
-            duration = (duration * 1000) - 500 # (ms)
+            duration = (duration * 1000) - 1000 # (ms)
             time.sleep(0.5)
             self.leds.show_picture(delay=int(duration//width), filename=self.config["temp_picture_name"])
 
@@ -273,7 +363,7 @@ class Holobot(tk.Frame):
     def change_auto(self):
         self.auto = not self.auto
         if self.auto:
-            # disable manual controls TODO
+            # disable manual controls
             self.robot_test_leds_button["state"] = "disabled"
             self.robot_test_lines_button["state"] = "disabled"
             self.robot_test_all_button["state"] = "disabled"
@@ -287,7 +377,7 @@ class Holobot(tk.Frame):
             self.auto_thread.start()
             pass
         else:
-            # enable controls TODO
+            # enable controls
             self.robot_test_leds_button["state"] = "normal"
             self.robot_test_lines_button["state"] = "normal"
             self.robot_test_all_button["state"] = "normal"
@@ -296,6 +386,7 @@ class Holobot(tk.Frame):
             self.brightness_scale.configure(state = "normal", takefocus=1)
             pass
 
+    # run in AUTO mode, this is launched in it's own thread
     def auto_mode(self):
         while (self.auto):
             # get a random movement
@@ -303,7 +394,7 @@ class Holobot(tk.Frame):
             # configure camera
             shutter = self.camera.get_longer_shutter(mov["duration"])
             print("Shutter: " + str(shutter))
-            self.camera.set_aperture(self.camera.APERTURE_25)
+            self.camera.set_aperture(self.config["default_aperture"])
             self.camera.set_shutter_speed(str(shutter))
             self.camera.set_iso(self.camera.ISO_100)
 
@@ -328,6 +419,9 @@ class Holobot(tk.Frame):
             # wait for camera to finish
             cam_th.join()
 
+            # show it
+            self.reload_picture()
+
             # tell we have a new picture
             msg = liblo.Message("/nueva")
             msg.add(0, "foto!")
@@ -336,11 +430,11 @@ class Holobot(tk.Frame):
             # return home
             self.debug("Homing...")
             self.kuka.home()
-            while (self.kuka.is_moving() and self.auto):
-                time.sleep(0.25)
+            #while (self.kuka.is_moving() and self.auto):
+            #    time.sleep(0.25)
 
             # and wait
-            self.debug("Waiting...")
+            self.debug("Homing and waiting..." + " " + self.leds.get_battery() + " V.")
             time.sleep(self.config["pause"])
 
     def on_exit(self):

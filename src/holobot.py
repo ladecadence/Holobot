@@ -125,7 +125,7 @@ class Holobot(tk.Frame):
             time.sleep(0.25)
 
         # ok, now call the movement, LED animation and trigger camera,
-        self.launch_lines(mov["duration"], mov["rot"], mov["mirror"])
+        self.launch_lines(mov["duration"])
         # camera blocks, so launch it in a thread
         cam_th = threading.Thread(target = self.camera.take_picture)
         cam_th.start()
